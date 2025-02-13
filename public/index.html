@@ -4,13 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Transcription App</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        #upload-box {
+            border: 2px dashed #ccc;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s ease;
+        }
+        #upload-box:hover {
+            border-color: #666;
+        }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div id="root"></div>
-    <script type="text/babel" src="{{ url_for('static', filename='js/app.js') }}"></script>
+<body class="bg-light">
+    <div class="container py-5">
+        <h1 class="mb-4">Audio Transcription App</h1>
+        
+        <!-- Upload Section -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Upload Audio File</h5>
+                <div id="upload-box" class="mb-3">
+                    <p class="mb-0">Drag and drop an audio file here or click to select</p>
+                    <input type="file" id="file-input" accept="audio/*" style="display: none;">
+                </div>
+                <small class="text-muted">Supported formats: WAV, MP3, OGG, FLAC, M4A</small>
+            </div>
+        </div>
+
+        <!-- File List Section -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Your Files</h5>
+                <div id="file-list">
+                    <!-- File list will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcription Section -->
+        <div id="transcription-section" class="card mb-4" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title">Transcription</h5>
+                <div id="transcription-content">
+                    <!-- Transcription content will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Section -->
+        <div id="stats-section" class="card" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title">Processing Statistics</h5>
+                <div id="stats-content">
+                    <!-- Stats content will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>

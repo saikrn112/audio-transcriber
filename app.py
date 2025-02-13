@@ -14,11 +14,7 @@ logger = logging.getLogger(__name__)
 # Initialize configuration
 config.init()
 
-app = Flask(__name__, 
-    static_folder='public',
-    static_url_path='',
-    template_folder='public'
-)
+app = Flask(__name__, static_folder='public', static_url_path='/static')
 CORS(app)  # Enable CORS for all routes
 
 def get_transcription_status(filename):
@@ -57,111 +53,112 @@ def get_file_info(filename):
         logger.error(f"Error getting file info: {e}")
         return None
 
-def is_processed_file(filename):
-    """Check if a file is a processed temporary file."""
-    return '_processed.' in filename
-
 @app.route('/')
 def index():
-    return render_template('index.html')
+    """Serve the main application page."""
+    return send_from_directory('public', 'index.html')
 
-@app.route('/api/files')
+@app.route('/app.js')
+def serve_js():
+    """Serve the application JavaScript file."""
+    return send_from_directory('public', 'app.js')
+
+@app.route('/api/files', methods=['GET'])
 def list_files():
-    logger.info("Listing files from %s", config.UPLOADS_DIR)
-    files = []
+    """List all uploaded files and their transcription status."""
     try:
+        files = []
         for filename in os.listdir(config.UPLOADS_DIR):
-            if os.path.isfile(os.path.join(config.UPLOADS_DIR, filename)) and not is_processed_file(filename):
+            if config.is_allowed_file(filename):
                 file_info = get_file_info(filename)
                 if file_info:
                     files.append(file_info)
+        return jsonify({'files': files})
     except Exception as e:
-        logger.error("Error listing files: %s", str(e))
+        logger.error(f"Error listing files: {e}")
         return jsonify({'error': str(e)}), 500
-    return jsonify({'files': files})
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
-    logger.info("Upload request received")
-    if 'file' not in request.files:
-        logger.error("No file part in request")
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        logger.error("No selected file")
-        return jsonify({'error': 'No selected file'}), 400
-
-    if file and config.is_allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        paths = config.get_file_paths(filename)
-        logger.info("Saving file to: %s", paths['upload'])
-        try:
-            file.save(paths['upload'])
-            logger.info("File uploaded successfully: %s", filename)
-            return jsonify({'message': 'File uploaded successfully', 'filename': filename})
-        except Exception as e:
-            logger.error("Error saving file: %s", str(e))
-            return jsonify({'error': f'Error saving file: {str(e)}'}), 500
-    
-    logger.error("File type not allowed: %s", file.filename)
-    return jsonify({'error': 'File type not allowed'}), 400
-
-@app.route('/api/transcribe/<filename>')
-def transcribe_file(filename):
-    paths = config.get_file_paths(filename)
-    if not os.path.exists(paths['upload']):
-        return jsonify({'error': 'File not found'}), 404
-
+    """Handle file upload."""
     try:
-        # Process the audio file
-        logger.info(f"Starting transcription for {filename}")
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not config.is_allowed_file(file.filename):
+            return jsonify({'error': 'File type not allowed'}), 400
+
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(config.UPLOADS_DIR, filename)
         
-        # Update status to processing
-        os.makedirs(os.path.dirname(paths['stats']), exist_ok=True)
-        with open(paths['stats'], 'w') as f:
-            json.dump({'status': 'processing', 'progress': 0}, f)
-            
-        # Process the audio file
-        transcript = process_audio(
-            paths['upload'],
-            output_dir=config.DATA_DIR,
-            max_speakers=config.DEFAULT_MAX_SPEAKERS
-        )
-        
-        logger.info(f"Transcription completed for {filename}")
-        return jsonify({
-            'message': 'Transcription completed',
-            'transcript': transcript
-        })
+        # Save the uploaded file
+        file.save(file_path)
+        logger.info(f"File saved: {file_path}")
+
+        # Return file info
+        file_info = get_file_info(filename)
+        return jsonify(file_info)
+
     except Exception as e:
-        logger.error(f"Transcription failed for {filename}: {str(e)}")
-        # Update status to error
-        os.makedirs(os.path.dirname(paths['stats']), exist_ok=True)
-        with open(paths['stats'], 'w') as f:
-            json.dump({'status': 'error', 'error': str(e)}, f)
+        logger.error(f"Error uploading file: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/transcription/<filename>')
-def get_transcription(filename):
-    paths = config.get_file_paths(filename)
-    
-    if not os.path.exists(paths['transcript']):
-        return jsonify({'error': 'Transcription not found'}), 404
-        
+@app.route('/api/transcribe/<filename>', methods=['GET'])
+def transcribe_file(filename):
+    """Start transcription for a file."""
     try:
+        if not config.is_allowed_file(filename):
+            return jsonify({'error': 'Invalid file type'}), 400
+
+        file_path = os.path.join(config.UPLOADS_DIR, filename)
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+
+        # Get output paths
+        paths = config.get_file_paths(filename)
+
+        # Start transcription in a background thread
+        import threading
+        thread = threading.Thread(target=process_audio, args=(
+            file_path,
+            paths['transcript'],
+            paths['stats'],
+            config.DEFAULT_MAX_SPEAKERS
+        ))
+        thread.start()
+
+        return jsonify({'message': 'Transcription started'})
+
+    except Exception as e:
+        logger.error(f"Error starting transcription: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/transcription/<filename>', methods=['GET'])
+def get_transcription(filename):
+    """Get transcription results for a file."""
+    try:
+        paths = config.get_file_paths(filename)
+        
+        if not os.path.exists(paths['transcript']):
+            return jsonify({'error': 'Transcription not found'}), 404
+
         with open(paths['transcript'], 'r') as f:
             transcription = json.load(f)
-            
+        
         with open(paths['stats'], 'r') as f:
             stats = json.load(f)
-            
+
         return jsonify({
             'transcription': transcription,
             'stats': stats
         })
+
     except Exception as e:
-        logger.error(f"Error reading transcription for {filename}: {str(e)}")
+        logger.error(f"Error getting transcription: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
