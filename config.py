@@ -67,25 +67,25 @@ def check_cuda_availability():
 def init():
     """Initialize application configuration"""
     global DEVICE, COMPUTE_TYPE
-    
-    # Create all required directories
-    for directory in [DATA_DIR, UPLOADS_DIR, TRANSCRIPTS_DIR, STATS_DIR]:
-        os.makedirs(directory, exist_ok=True)
-        logger.info(f"Ensuring directory exists: {directory}")
-    
-    # Validate configuration
-    if not HUGGINGFACE_TOKEN:
-        logger.warning("HUGGINGFACE_TOKEN not set. Speaker diarization will be disabled.")
-    
-    # Check CUDA availability and update device settings
+
+    # Create necessary directories
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+    os.makedirs(STATS_DIR, exist_ok=True)
+
+    # Check CUDA availability
     if check_cuda_availability():
-        logger.info("CUDA is available and working - using GPU")
         DEVICE = "cuda"
         COMPUTE_TYPE = "float16"
+        logger.info("Using GPU acceleration")
     else:
-        logger.info("Using CPU for processing")
         DEVICE = "cpu"
         COMPUTE_TYPE = "int8"
+        logger.info("Using CPU for processing")
+
+    if not HUGGINGFACE_TOKEN:
+        logger.warning("HUGGINGFACE_TOKEN not set. Speaker diarization will be disabled.")
 
 def get_file_paths(filename):
     """Get standard file paths for a given filename"""

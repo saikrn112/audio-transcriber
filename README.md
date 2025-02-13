@@ -116,6 +116,10 @@ Edit `.env` to customize:
 4. Push to the branch
 5. Create a Pull Request
 
+
+## ToDos
+- [ ] add agentic workflow to identify tasks based on the audio meetings
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
