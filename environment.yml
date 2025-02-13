@@ -1,0 +1,21 @@
+name: audio-transcription
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - flask=2.3.3
+  - python-dotenv=1.0.0
+  - pytorch=2.1.0
+  - transformers=4.36.0
+  - ffmpeg
+  - onnxruntime
+  - pip
+  - pip:
+    - openai-whisper==20231117
+    - pyannote.audio==3.1.1
+    - soundfile==0.12.1
+    - werkzeug==2.3.7
+    - pydub==0.25.1
+    - ffmpeg-python==0.2.0
+    - onnxruntime-gpu

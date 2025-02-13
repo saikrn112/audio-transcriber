@@ -1,0 +1,40 @@
+# Data directory
+data/
+!data/.gitkeep
+
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Processed files
+*_processed.wav
+*_processed.m4a
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
