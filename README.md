@@ -19,37 +19,152 @@ A Flask-based web application for transcribing audio files with speaker diarizat
 
 ## Installation
 
-1. Clone the repository:
+### Quick Start with Docker
 ```bash
-git clone https://github.com/yourusername/audio-transcription-app.git
+# Clone the repository
+git clone https://github.com/saikrn112/audio-transcription-app.git
 cd audio-transcription-app
+
+# Build and run with Docker
+docker compose up
 ```
 
-2. Create a Python virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
-```
+The app will be available at `http://localhost:5000`
 
-3. Install the required packages:
-```bash
-pip install -r requirements.txt
-```
+### Manual Installation
 
-4. Set up your environment variables by copying the example file:
-```bash
-cp .env.example .env
-```
+1. **Prerequisites**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install -y python3.9 python3-pip ffmpeg
 
-5. Edit `.env` and add your HuggingFace token (required for speaker diarization):
-```env
-HUGGINGFACE_TOKEN=your_token_here
-USE_GPU=1  # Set to 0 for CPU-only
-FLASK_PORT=7000
-FLASK_DEBUG=0
-```
+   # macOS
+   brew install python@3.9 ffmpeg
+   ```
 
-Get your HuggingFace token from: https://huggingface.co/settings/tokens
+2. **Clone and Setup**
+   ```bash
+   # Clone repository
+   git clone https://github.com/saikrn112/audio-transcription-app.git
+   cd audio-transcription-app
+
+   # Create virtual environment
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+   ```
+
+3. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Environment Setup**
+   ```bash
+   # Copy example env file
+   cp .env.example .env
+
+   # Edit .env file with your Hugging Face token
+   # Get token from: https://huggingface.co/settings/tokens
+   nano .env
+   ```
+
+5. **Run the App**
+   ```bash
+   python app.py
+   ```
+
+Visit `http://localhost:5000` in your browser.
+
+### Docker Setup
+
+1. **Development Setup**
+   ```dockerfile
+   # Development Dockerfile
+   FROM python:3.9-slim
+
+   # Install system dependencies
+   RUN apt-get update && apt-get install -y \
+       ffmpeg \
+       && rm -rf /var/lib/apt/lists/*
+
+   # Install Python dependencies
+   COPY requirements.txt .
+   RUN pip install -r requirements.txt
+
+   # Copy application
+   COPY . .
+
+   # Run the application
+   CMD ["python", "app.py"]
+   ```
+
+2. **Production Setup**
+   ```yaml
+   # docker-compose.yml
+   version: '3.8'
+   services:
+     app:
+       build: .
+       ports:
+         - "5000:5000"
+       volumes:
+         - ./data:/app/data
+       environment:
+         - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+       restart: unless-stopped
+   ```
+
+3. **Build and Run**
+   ```bash
+   # Development
+   docker build -t audio-transcriber-dev .
+   docker run -p 5000:5000 audio-transcriber-dev
+
+   # Production
+   docker compose up -d
+   ```
+
+### Common Issues
+
+1. **FFmpeg Missing**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install ffmpeg
+
+   # macOS
+   brew install ffmpeg
+
+   # Windows
+   # Download from: https://www.gyan.dev/ffmpeg/builds/
+   # Add to PATH
+   ```
+
+2. **GPU Support**
+   ```bash
+   # Install CUDA dependencies
+   pip install torch==2.0.0+cu117 torchaudio==2.0.0+cu117 -f https://download.pytorch.org/whl/cu117/torch_stable.html
+   ```
+
+### TODOs for Installation
+
+1. **Docker Integration**
+   - [ ] Create optimized Dockerfile for production
+   - [ ] Add Docker Compose for easy deployment
+   - [ ] Include GPU support in Docker
+   - [ ] Add volume mounting for data persistence
+
+2. **Installation Script**
+   - [ ] Create single-command installation script
+   - [ ] Add system requirement checks
+   - [ ] Automate environment setup
+   - [ ] Add GPU detection and setup
+
+3. **Documentation**
+   - [ ] Add troubleshooting guide
+   - [ ] Include performance optimization tips
+   - [ ] Document all environment variables
+   - [ ] Add deployment guides for different platforms
 
 ## Directory Structure
 
@@ -75,7 +190,7 @@ python app.py
 
 2. Open your web browser and navigate to:
 ```
-http://localhost:7000
+http://localhost:5000
 ```
 
 3. Upload an audio file and wait for the transcription to complete.
@@ -96,7 +211,7 @@ Edit `.env` to customize:
 
 - `HUGGINGFACE_TOKEN`: Required for speaker diarization
 - `USE_GPU`: Enable/disable GPU acceleration (1/0)
-- `FLASK_PORT`: Web server port (default: 7000)
+- `FLASK_PORT`: Web server port (default: 5000)
 - `FLASK_DEBUG`: Enable debug mode (1/0)
 - `DEFAULT_MAX_SPEAKERS`: Maximum number of speakers to detect
 
@@ -116,9 +231,102 @@ Edit `.env` to customize:
 4. Push to the branch
 5. Create a Pull Request
 
+## TODOs and Known Issues
 
-## ToDos
-- [ ] add agentic workflow to identify tasks based on the audio meetings
+### High Priority
+
+1. **Audio Format Support**
+   - [ ] Replace WAV conversion with direct torchaudio support for m4a files
+   - [ ] Update file type validation to properly check audio formats
+   - [ ] Fix incorrect error messages about invalid file types during upload
+
+2. **Diarization Improvements**
+   - [ ] Investigate torchaudio for direct m4a support in diarization
+   - [ ] Add fallback options when diarization fails
+   - [ ] Improve speaker labeling consistency
+
+3. **Status and Statistics**
+   - [ ] Fix incorrect stats display in UI
+   - [ ] Add proper progress tracking for each step (transcription, diarization)
+   - [ ] Improve error messages and warnings
+   - [ ] Add detailed metadata about processing steps
+
+### Implementation Details
+
+#### Audio Processing
+Currently, the app converts audio files to WAV format before processing, which causes several issues:
+- Unnecessary disk usage from temporary WAV files
+- Potential quality loss from format conversion
+- Extra processing time
+- Issues with m4a files
+
+Proposed solution:
+1. Use torchaudio for direct m4a support:
+```python
+import torchaudio
+
+# Load audio directly
+waveform, sample_rate = torchaudio.load("audio.m4a")
+```
+
+2. Update validation to use proper MIME types and file signatures
+3. Remove WAV conversion step entirely
+
+#### Status Reporting
+Current issues with status reporting:
+- Incorrect progress percentages
+- Missing or delayed status updates
+- Unclear error messages
+- Incomplete metadata about processing steps
+
+Needed improvements:
+1. Track individual step progress:
+```json
+{
+    "status": "processing",
+    "steps": {
+        "transcription": {
+            "status": "complete",
+            "duration": "5.2s"
+        },
+        "diarization": {
+            "status": "processing",
+            "progress": 45,
+            "warnings": []
+        }
+    }
+}
+```
+
+2. Add detailed error reporting:
+```json
+{
+    "status": "error",
+    "error": {
+        "step": "diarization",
+        "message": "Failed to process audio",
+        "details": "Unsupported sample rate: 44100Hz",
+        "suggestions": ["Convert to 16kHz sample rate"]
+    }
+}
+```
+
+### Future Improvements
+
+1. **Performance**
+   - [ ] Add caching for processed audio files
+   - [ ] Implement batch processing for multiple files
+   - [ ] Add support for distributed processing
+
+2. **User Experience**
+   - [ ] Add real-time transcription preview
+   - [ ] Improve error messages and recovery options
+   - [ ] Add support for custom diarization settings
+
+3. **Quality**
+   - [ ] Add automated testing for different audio formats
+   - [ ] Implement validation for transcription quality
+   - [ ] Add confidence scores for speaker diarization
 
 ## License
 

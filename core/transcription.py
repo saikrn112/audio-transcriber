@@ -119,15 +119,17 @@ class TranscriptionError(Exception):
 def track_time(func: Callable) -> Callable:
     """Decorator to track execution time of a function."""
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, *args, **kwargs):
         start_time = time.time()
         try:
-            result = func(*args, **kwargs)
+            result = func(self, *args, **kwargs)
             return result
         finally:
             end_time = time.time()
             execution_time = end_time - start_time
             logger.info(f"{func.__name__} took {execution_time:.2f} seconds")
+            # Store timing on the instance instead of the wrapper
+            setattr(self, f'timing_{func.__name__}', execution_time)
     return wrapper
 
 def update_progress(func: Callable) -> Callable:
@@ -285,52 +287,99 @@ class BaseTranscriptionService:
     )
     def save_results(self, result: TranscriptionResult) -> None:
         """Save transcription results."""
-        pass
+        if not result:
+            return
+            
+        # Get the timing information from instance attributes
+        timings = {}
+        for step in ['load_models', 'transcribe_audio', 'perform_diarization', 'save_results']:
+            timing_key = f'timing_{step}'
+            if hasattr(self, timing_key):
+                timings[step] = getattr(self, timing_key)
+                
+        # Create stats
+        stats = {
+            'transcription_info': {
+                'language': result.language,
+                'duration': result.duration,
+                'num_speakers': len(result.speakers) if result.speakers else len(set(segment.get('speaker', '') for segment in result.segments)),
+                'diarization_available': bool(result.speakers)
+            },
+            'timings': timings,
+            'total_time': sum(timings.values())
+        }
         
+        # Save transcription result
+        transcription_data = {
+            'segments': result.segments,
+            'metadata': {
+                'language': result.language,
+                'duration': result.duration,
+                'speakers': result.speakers,
+                'timestamp': time.time()
+            }
+        }
+        
+        with open(self.stats_path.replace('.stats.json', '.json'), 'w') as f:
+            json.dump(transcription_data, f, indent=2)
+            
+        # Save stats
+        with open(self.stats_path, 'w') as f:
+            json.dump(stats, f, indent=2)
+
     @track_time
+    @check_stop_signal
+    @update_progress
+    @step_registry.register_step(
+        name="Process Audio",
+        description="Processing audio file",
+        progress_start=0,
+        progress_end=100
+    )
     def process_audio(self, audio_path: str) -> Optional[TranscriptionResult]:
         """Process audio file with transcription and diarization."""
         try:
-            # Initialize
-            self._update_status(
-                TranscriptionStatus.PROCESSING,
-                progress=0,
-                step="Starting transcription",
-                step_info={'step_number': 0, 'total_steps': step_registry.total_steps}
-            )
-            
-            # Load models
+            # Load models first
             self.load_models()
-            if self.should_stop():
-                return None
-                
-            # Transcribe audio
+            
+            # Perform diarization first
+            logger.info("Starting speaker diarization")
+            diarization = self.perform_diarization(audio_path, {})
+            has_diarization = bool(diarization and "segments" in diarization)
+            
+            # Then do transcription
+            logger.info("Starting transcription")
             transcription = self.transcribe_audio(audio_path)
-            if self.should_stop():
-                return None
-                
-            # Perform diarization
-            result = self.perform_diarization(audio_path, transcription)
-            if self.should_stop():
-                return None
-                
+            
+            # Combine results
+            if has_diarization:
+                logger.info("Combining diarization with transcription")
+                # Use diarization segments as base
+                result = diarization
+                # Update with transcription info
+                result["language"] = transcription.get("language", "")
+                result["duration"] = transcription.get("duration", 0)
+            else:
+                logger.info("Using transcription without diarization")
+                result = transcription
+            
             # Create final result
             final_result = TranscriptionResult(
-                text=result.get('text', ''),
-                language=result.get('language', 'unknown'),
-                segments=result.get('segments', []),
-                speakers=result.get('speakers', []),
-                duration=result.get('duration', 0),
+                text="\n".join(segment.get("text", "") for segment in result.get("segments", [])),
+                language=result.get("language", ""),
+                segments=result.get("segments", []),
+                speakers=result.get("speakers", []),
+                duration=result.get("duration", 0),
                 metadata={
-                    'processing_time': time.time(),
-                    'audio_path': audio_path
+                    "filename": os.path.basename(audio_path),
+                    "timestamp": time.time(),
+                    "model": "whisperx",
+                    "has_diarization": has_diarization,
+                    "diarization_error": "" if has_diarization else "Speaker diarization failed or was skipped"
                 }
             )
             
-            # Save results
-            self.save_results(final_result)
-            
-            # Update final status
+            # Save results with complete status
             self._update_status(
                 status=TranscriptionStatus.COMPLETE,
                 progress=100,
@@ -341,7 +390,8 @@ class BaseTranscriptionService:
                     'step_name': 'Complete',
                     'step_description': 'Transcription complete',
                     'progress': 100,
-                    'relative_progress': 1.0
+                    'relative_progress': 1.0,
+                    'warnings': [] if has_diarization else ["Speaker diarization was not performed"]
                 }
             )
             
@@ -353,4 +403,4 @@ class BaseTranscriptionService:
                 status=TranscriptionStatus.ERROR,
                 error=str(e)
             )
-            raise TranscriptionError(str(e))
+            raise

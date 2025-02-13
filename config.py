@@ -23,7 +23,7 @@ STATS_DIR = os.path.join(DATA_DIR, 'stats')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
 
 # File configuration
-ALLOWED_AUDIO_EXTENSIONS = {'wav', 'mp3', 'ogg', 'flac', 'm4a'}
+ALLOWED_AUDIO_EXTENSIONS = {'wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'mp4', 'aiff', 'wma'}
 
 # Flask configuration
 FLASK_PORT = int(os.getenv('FLASK_PORT', '7000'))
@@ -37,7 +37,7 @@ WHISPER_MODEL = "base"
 
 def check_cuda_availability():
     """Check if CUDA is available and properly configured"""
-    if os.getenv('USE_GPU', '1').lower() not in ('1', 'true', 'yes'):
+    if os.getenv('USE_GPU', '0').lower() not in ('1', 'true', 'yes'):
         logger.info("GPU usage disabled by configuration")
         return False
 
@@ -51,7 +51,10 @@ def check_cuda_availability():
         try:
             test_tensor = torch.zeros(1).cuda()
             del test_tensor
-            logger.info("CUDA test successful")
+            # Get CUDA device info
+            device_name = torch.cuda.get_device_name()
+            device_capability = torch.cuda.get_device_capability()
+            logger.info(f"CUDA test successful - Device: {device_name}, Compute Capability: {device_capability}")
             return True
         except Exception as e:
             logger.warning(f"CUDA test failed: {str(e)}")
@@ -78,11 +81,11 @@ def init():
     if check_cuda_availability():
         DEVICE = "cuda"
         COMPUTE_TYPE = "float16"
-        logger.info("Using GPU acceleration")
+        logger.info(f"GPU acceleration enabled - Device: {DEVICE}, Compute Type: {COMPUTE_TYPE}")
     else:
         DEVICE = "cpu"
         COMPUTE_TYPE = "int8"
-        logger.info("Using CPU for processing")
+        logger.info(f"Using CPU for processing - Device: {DEVICE}, Compute Type: {COMPUTE_TYPE}")
 
     if not HUGGINGFACE_TOKEN:
         logger.warning("HUGGINGFACE_TOKEN not set. Speaker diarization will be disabled.")
@@ -98,4 +101,11 @@ def get_file_paths(filename):
 
 def is_allowed_file(filename):
     """Check if a file has an allowed extension"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_AUDIO_EXTENSIONS
+    if not filename:
+        return False
+    try:
+        ext = filename.rsplit('.', 1)[1].lower()
+        logger.info(f"Checking file extension: {ext}")
+        return ext in ALLOWED_AUDIO_EXTENSIONS
+    except IndexError:
+        return False

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - USE_GPU=0  # Set to 1 for GPU support
+      - FLASK_DEBUG=0
+    restart: unless-stopped
+
+  # Uncomment for GPU support
+  # app-gpu:
+  #   build: 
+  #     context: .
+  #     dockerfile: Dockerfile.gpu
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+  #     - USE_GPU=1
+  #     - FLASK_DEBUG=0
+  #   volumes:
+  #     - ./data:/app/data
+  #   ports:
+  #     - "5000:5000"
+  #   restart: unless-stopped

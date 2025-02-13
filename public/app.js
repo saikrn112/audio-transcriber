@@ -494,21 +494,62 @@ async function viewTranscription(filename) {
         
         const data = await response.json();
         currentTranscription = data.transcription;
+        
+        // Show transcription section and hide stats
+        transcriptionSection.style.display = 'block';
+        statsSection.style.display = 'none';
+        
         displayTranscription(currentTranscription);
-        displayStats(data.stats);
         setupDownloadButtons(filename);
+        
+        // Add view stats button if not exists
+        let viewStatsBtn = document.getElementById('view-stats-btn');
+        if (!viewStatsBtn) {
+            viewStatsBtn = document.createElement('button');
+            viewStatsBtn.id = 'view-stats-btn';
+            viewStatsBtn.className = 'btn btn-outline-secondary ms-2';
+            viewStatsBtn.innerHTML = '<i class="bi bi-graph-up"></i> View Stats';
+            viewStatsBtn.onclick = () => viewStats(data.stats);
+            document.querySelector('#transcription-section .btn-group').appendChild(viewStatsBtn);
+        }
     } catch (error) {
         console.error('Error loading transcription:', error);
         alert('Error loading transcription. Please try again.');
     }
 }
 
-function setupDownloadButtons(filename) {
-    const downloadTxtBtn = document.getElementById('download-txt');
-    const downloadJsonBtn = document.getElementById('download-json');
-    
-    downloadTxtBtn.onclick = () => downloadTranscription(filename, 'txt');
-    downloadJsonBtn.onclick = () => downloadTranscription(filename, 'json');
+function viewStats(stats) {
+    transcriptionSection.style.display = 'none';
+    statsSection.style.display = 'block';
+    displayStats(stats);
+}
+
+function displayTranscription(segments) {
+    transcriptionSection.style.display = 'block';
+    transcriptionContent.innerHTML = '';
+
+    if (!Array.isArray(segments)) {
+        transcriptionContent.innerHTML = '<p class="text-muted">No transcription available</p>';
+        return;
+    }
+
+    // Sort segments by start time
+    segments.sort((a, b) => a.start - b.start);
+
+    segments.forEach(segment => {
+        const div = document.createElement('div');
+        div.className = 'mb-3';
+        div.innerHTML = `
+            <div class="d-flex">
+                <strong class="me-2">${segment.speaker || 'Speaker'}:</strong>
+                <span>${segment.text || ''}</span>
+            </div>
+            <small class="text-muted">
+                ${formatTime(segment.start)} - ${formatTime(segment.end)}
+            </small>
+        `;
+        transcriptionContent.appendChild(div);
+    });
 }
 
 function downloadTranscription(filename, format) {
@@ -522,13 +563,21 @@ function downloadTranscription(filename, format) {
     let mimeType;
 
     if (format === 'txt') {
-        content = currentTranscription.map(segment => 
-            `[${formatTime(segment.start)} - ${formatTime(segment.end)}] ${segment.speaker || 'Unknown'}: ${segment.text}`
+        // Sort segments by start time for text format
+        const sortedSegments = [...currentTranscription].sort((a, b) => a.start - b.start);
+        content = sortedSegments.map(segment => 
+            `[${formatTime(segment.start)} - ${formatTime(segment.end)}] ${segment.speaker || 'Speaker'}: ${segment.text}`
         ).join('\n\n');
         downloadFilename = `${filename.split('.')[0]}_transcript.txt`;
         mimeType = 'text/plain';
     } else {
-        content = JSON.stringify(currentTranscription, null, 2);
+        content = JSON.stringify({
+            segments: currentTranscription,
+            metadata: {
+                filename: filename,
+                timestamp: new Date().toISOString()
+            }
+        }, null, 2);
         downloadFilename = `${filename.split('.')[0]}_transcript.json`;
         mimeType = 'application/json';
     }
@@ -538,77 +587,80 @@ function downloadTranscription(filename, format) {
     const a = document.createElement('a');
     a.href = url;
     a.download = downloadFilename;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
 
-function displayTranscription(segments) {
-    transcriptionSection.style.display = 'block';
-    transcriptionContent.innerHTML = '';
-
-    if (!Array.isArray(segments)) {
-        transcriptionContent.innerHTML = '<p class="text-muted">No transcription available</p>';
-        return;
-    }
-
-    segments.forEach(segment => {
-        const div = document.createElement('div');
-        div.className = 'mb-3';
-        div.innerHTML = `
-            <div class="d-flex">
-                <strong class="me-2">${segment.speaker || 'Unknown'}:</strong>
-                <span>${segment.text || ''}</span>
-            </div>
-            <small class="text-muted">
-                ${formatTime(segment.start)} - ${formatTime(segment.end)}
-            </small>
-        `;
-        transcriptionContent.appendChild(div);
-    });
-}
-
 function displayStats(stats) {
-    statsSection.style.display = 'block';
-    
     if (!stats) {
         statsContent.innerHTML = '<p class="text-muted">No statistics available</p>';
         return;
     }
 
     const transcriptionInfo = stats.transcription_info || {};
-    const steps = stats.steps || {};
+    const timings = stats.timings || {};
     
+    // Calculate total duration from segments if available
+    let duration = 0;
+    if (currentTranscription && currentTranscription.length > 0) {
+        const lastSegment = currentTranscription[currentTranscription.length - 1];
+        duration = lastSegment.end;
+    }
+
+    // Get unique speakers
+    const speakers = new Set();
+    if (currentTranscription) {
+        currentTranscription.forEach(segment => {
+            if (segment.speaker) {
+                speakers.add(segment.speaker);
+            }
+        });
+    }
+
     statsContent.innerHTML = `
         <div class="row">
             <div class="col-md-6">
                 <h6>Transcription Info</h6>
                 <ul class="list-unstyled">
-                    <li>Language: ${transcriptionInfo.language || 'Unknown'}</li>
-                    <li>Number of Speakers: ${transcriptionInfo.num_speakers || 1}</li>
-                    <li>Duration: ${formatTime(transcriptionInfo.duration || 0)}</li>
-                    <li>Speaker Diarization: ${transcriptionInfo.diarization_available ? 'Yes' : 'No'}</li>
+                    <li><strong>Language:</strong> ${transcriptionInfo.language || 'Unknown'}</li>
+                    <li><strong>Duration:</strong> ${formatTime(duration)}</li>
+                    <li><strong>Number of Speakers:</strong> ${speakers.size || 'Unknown'}</li>
+                    <li><strong>Number of Segments:</strong> ${currentTranscription ? currentTranscription.length : 0}</li>
                 </ul>
             </div>
             <div class="col-md-6">
                 <h6>Processing Times</h6>
                 <ul class="list-unstyled">
-                    ${Object.entries(steps).map(([step, time]) => 
-                        `<li>${step}: ${(time || 0).toFixed(2)}s</li>`
-                    ).join('')}
-                    <li><strong>Total Time: ${(stats.total_time || 0).toFixed(2)}s</strong></li>
+                    ${Object.entries(timings).map(([step, time]) => `
+                        <li><strong>${step}:</strong> ${time ? time.toFixed(2) : '0.00'}s</li>
+                    `).join('')}
+                    <li><strong>Total Time:</strong> ${(Object.values(timings).reduce((a, b) => a + (b || 0), 0)).toFixed(2)}s</li>
                 </ul>
             </div>
+        </div>
+        
+        <div class="mt-3">
+            <button class="btn btn-outline-primary" onclick="backToTranscription()">
+                <i class="bi bi-arrow-left"></i> Back to Transcription
+            </button>
         </div>
     `;
 }
 
-function formatTime(seconds) {
-    if (!seconds) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+function backToTranscription() {
+    statsSection.style.display = 'none';
+    transcriptionSection.style.display = 'block';
+}
+
+function setupDownloadButtons(filename) {
+    const downloadTxtBtn = document.getElementById('download-txt');
+    const downloadJsonBtn = document.getElementById('download-json');
+    
+    downloadTxtBtn.onclick = () => downloadTranscription(filename, 'txt');
+    downloadJsonBtn.onclick = () => downloadTranscription(filename, 'json');
 }
 
 async function deleteFile(filename) {
@@ -737,4 +789,11 @@ function updateActionButtons(file, actionButtons) {
             <i class="bi bi-trash"></i> Delete
         </button>
     `;
+}
+
+function formatTime(seconds) {
+    if (!seconds) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
 }

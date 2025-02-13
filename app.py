@@ -331,14 +331,25 @@ def get_transcription(filename):
         if not os.path.exists(paths['transcript']):
             return jsonify({'error': 'Transcription not found'}), 404
 
+        # Load transcription
         with open(paths['transcript'], 'r') as f:
-            transcription = json.load(f)
-        
-        with open(paths['stats'], 'r') as f:
-            stats = json.load(f)
+            data = json.load(f)
+            
+        # Extract segments from the transcription
+        segments = []
+        if isinstance(data, dict):
+            segments = data.get('segments', [])
+        elif isinstance(data, list):
+            segments = data
+            
+        # Load stats if available
+        stats = {}
+        if os.path.exists(paths['stats']):
+            with open(paths['stats'], 'r') as f:
+                stats = json.load(f)
 
         return jsonify({
-            'transcription': transcription,
+            'transcription': segments,
             'stats': stats
         })
 
@@ -351,29 +362,32 @@ def stop_transcription(filename):
     """Stop an active transcription process."""
     try:
         filename = secure_filename(filename)
-        
-        # Check if process exists and is running
-        if filename not in active_processes:
-            return jsonify({'error': 'No active transcription found'}), 404
-            
-        process = active_processes[filename]
-        if not process.is_alive():
-            del active_processes[filename]
-            return jsonify({'error': 'Process already completed'}), 400
-            
-        # Set stop flag in stats file
         paths = config.get_file_paths(filename)
-        if os.path.exists(paths['stats']):
-            with open(paths['stats'], 'r+') as f:
-                stats = json.load(f)
-                stats['status'] = 'stopped'
-                stats['step'] = 'Stopped by user'
-                f.seek(0)
-                json.dump(stats, f, indent=2)
-                f.truncate()
         
-        # Remove from active processes
-        del active_processes[filename]
+        # Always try to update stats file first
+        try:
+            if os.path.exists(paths['stats']):
+                with open(paths['stats'], 'r+') as f:
+                    stats = json.load(f)
+                    stats['status'] = 'stopped'
+                    stats['step'] = 'Stopped by user'
+                    stats['stop_time'] = time.time()
+                    f.seek(0)
+                    json.dump(stats, f, indent=2)
+                    f.truncate()
+                logger.info(f"Updated stats file for {filename} with stopped status")
+        except Exception as e:
+            logger.error(f"Error updating stats file: {e}")
+            
+        # Then try to handle the process
+        if filename in active_processes:
+            process = active_processes[filename]
+            if process.is_alive():
+                logger.info(f"Stopping active process for {filename}")
+                process.join(timeout=1)  # Give it a second to finish
+            del active_processes[filename]
+            logger.info(f"Removed {filename} from active processes")
+            
         return jsonify({'message': 'Transcription stopped'})
         
     except Exception as e:
