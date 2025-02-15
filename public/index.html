@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,25 +7,77 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --upload-box-border: #ccc;
+            --upload-box-hover: #666;
+        }
+        
+        [data-bs-theme="dark"] {
+            --upload-box-border: #444;
+            --upload-box-hover: #888;
+        }
+        
         #upload-box {
-            border: 2px dashed #ccc;
+            border: 2px dashed var(--upload-box-border);
             padding: 2rem;
             text-align: center;
             cursor: pointer;
-            transition: border-color 0.3s ease;
+            transition: all 0.3s ease;
         }
+        
         #upload-box:hover {
-            border-color: #666;
+            border-color: var(--upload-box-hover);
         }
+        
         .progress {
             height: 5px;
         }
+        
         .file-table th {
             white-space: nowrap;
         }
+        
+        .theme-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+        
+        /* Dark mode specific styles */
+        [data-bs-theme="dark"] .card {
+            background-color: #2b2b2b;
+            border-color: #444;
+        }
+        
+        [data-bs-theme="dark"] .table {
+            --bs-table-color: #fff;
+            --bs-table-bg: #2b2b2b;
+            --bs-table-border-color: #444;
+        }
+        
+        [data-bs-theme="dark"] .border {
+            border-color: #444 !important;
+        }
+        
+        /* Background colors */
+        body {
+            transition: background-color 0.3s ease;
+            background-color: #f8f9fa;
+        }
+        
+        [data-bs-theme="dark"] body {
+            background-color: #1a1a1a;
+            color: #fff;
+        }
     </style>
 </head>
-<body class="bg-light">
+<body>
+    <!-- Theme Toggle Button -->
+    <button class="btn btn-outline-primary theme-toggle" id="theme-toggle">
+        <i class="bi bi-moon-fill"></i>
+    </button>
+
     <div class="container py-5">
         <h1 class="mb-4">Audio Transcription App</h1>
         
@@ -100,7 +152,32 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="app.js"></script>
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        const themeIcon = themeToggle.querySelector('i');
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-bs-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-bs-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            html.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        function updateThemeIcon(theme) {
+            themeIcon.className = theme === 'light' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+            themeToggle.setAttribute('title', `Switch to ${theme === 'light' ? 'dark' : 'light'} mode`);
+        }
+    </script>
 </body>
 </html>
