@@ -1,76 +1,102 @@
-# Audio Transcription App
+# Audio Transcriber
 
-A Flask-based web application for transcribing audio files with speaker diarization support.
+Multi-speaker meeting transcription with speaker diarization, optimized for NVIDIA GPUs.
 
-## Features
+Uses NeMo's cascaded speaker diarization pipeline + Parakeet ASR:
+- **VAD**: MarbleNet (voice activity detection)
+- **Speaker Embeddings**: TitaNet-Large
+- **Clustering**: Spectral clustering (auto-detects number of speakers)
+- **ASR**: Parakeet-TDT-0.6B-v2 (NVIDIA's open-source ASR with word timestamps)
 
-- Audio file transcription using WhisperX
-- Speaker diarization using pyannote.audio
-- Support for multiple audio formats
-- Simple web interface for file upload and management
-- Real-time status updates
-- Download transcriptions in TXT or JSON format
+No API keys or HuggingFace tokens required. All models auto-download from NGC/HuggingFace on first run.
 
-## Installation
+## Requirements
 
-For detailed installation instructions, including Docker setup, see [INSTALL.md](INSTALL.md).
+- NVIDIA GPU (tested on H100, should work on any CUDA GPU with ≥16GB VRAM)
+- Docker with NVIDIA Container Toolkit
+- ~4GB disk for model downloads (cached after first run)
+
+## Quick Start (Docker on GPU cluster)
+
+```bash
+# 1. Launch the container
+bash docker/launch_transcriber.sh
+
+# 2. Inside the container, transcribe an audio file
+python nemo_transcribe.py /workspace/data/uploads/meeting.m4a
+
+# With options
+python nemo_transcribe.py meeting.m4a --max-speakers 5 -o transcript.txt
+```
+
+## Setup
+
+### Docker (recommended)
+
+The Docker image includes all dependencies. Build and launch:
+
+```bash
+# Build image (automatic on first launch)
+docker build -t transcriber:v2 -f docker/Dockerfile.transcriber-v2 docker/
+
+# Launch container (edit paths in launch_transcriber.sh for your setup)
+bash docker/launch_transcriber.sh
+```
+
+### Manual install (conda)
+
+```bash
+conda create -n transcriber python=3.11 -y
+conda activate transcriber
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install "nemo_toolkit[asr]" soundfile pydub
+```
 
 ## Usage
 
-1. Start the application
-2. Open your web browser and navigate to `http://localhost:5000`
-3. Upload an audio file and wait for the transcription to complete
-4. View the transcription with speaker labels
-5. Download the results in your preferred format
+```bash
+# Basic — auto-detects speakers, outputs to <input>.transcript.txt
+python nemo_transcribe.py recording.m4a
 
-## TODOs
+# Specify max speakers and output path
+python nemo_transcribe.py recording.m4a --max-speakers 4 -o notes.txt
 
-1. **Audio Processing**
-   - [ ] Replace WAV conversion with direct torchaudio support for m4a files
-   - [ ] Fix file type validation and error messages
-   - [ ] Improve speaker diarization with fallback options
-
-2. **User Interface**
-   - [ ] Fix incorrect stats display
-   - [ ] Add proper progress tracking
-   - [ ] Improve error messages and warnings
-
-3. **Deployment**
-   - [ ] Add Docker support with easy installation and GPU support
-
-4. **Incorrect reporting**
-   - [ ] Incorrect progress percentages
-   - [ ] Missing or delayed status updates
-   - [ ] Unclear error messages
-   - [ ] Incomplete metadata about processing steps
-
-5. **Track individual step progress**
-```json
-{
-    "status": "processing",
-    "steps": {
-        "transcription": {
-            "status": "complete",
-            "duration": "5.2s"
-        },
-        "diarization": {
-            "status": "processing",
-            "progress": 45,
-            "warnings": []
-        }
-    }
-}
+# Supports any format ffmpeg can read: m4a, mp3, wav, ogg, flac, etc.
+python nemo_transcribe.py podcast.mp3 -o podcast-transcript.txt
 ```
 
-6. Add detailed error reporting:
-```json
-{
-    "status": "error",
-    "error": {
-        "step": "diarization",
-        "message": "Failed to process audio",
-        "details": "Unsupported sample rate: 44100Hz",
-        "suggestions": ["Convert to 16kHz sample rate"]
-    }
-}
+## Output format
+
+Speaker-labeled transcript with timestamps:
+
 ```
+[0.2s] speaker_1: So basically our goal is to make sure that our performance is on par.
+[15.4s] speaker_0: I think we should test both. That's also something.
+[34.2s] speaker_1: Yeah, I think just picking two that are representative is good enough.
+[116.2s] speaker_2: Maybe one clarification here...
+```
+
+## Performance
+
+On H100 (with cached models):
+- 73-min meeting → ~2.5 min processing
+- 32-min 1:1 → ~1.5 min processing
+- 20-min 1:1 → ~1 min processing
+
+First run downloads ~4GB of models and takes longer.
+
+## Project structure
+
+```
+nemo_transcribe.py              # Main transcription script (NeMo pipeline)
+docker/
+  Dockerfile.transcriber-v2     # GPU Docker image with NeMo + dependencies
+  launch_transcriber.sh         # Container launch script
+data/
+  uploads/                      # Input audio files
+  transcripts/                  # Output transcripts
+```
+
+## Legacy
+
+The `app.py`, `transcribe.py`, `core/`, and `config.py` files are from an older WhisperX-based implementation. The current recommended approach is `nemo_transcribe.py`.

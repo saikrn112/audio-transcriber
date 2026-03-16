@@ -1,0 +1,41 @@
+FROM nvcr.io/nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+
+# System essentials + ffmpeg/sox for audio processing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git wget curl vim tmux htop \
+    ffmpeg sox libsndfile1 \
+    build-essential cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh
+ENV PATH="/opt/conda/bin:${PATH}"
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Accept conda TOS + create env
+RUN conda config --set auto_activate_base false && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda create -n transcriber python=3.11 -y
+SHELL ["conda", "run", "-n", "transcriber", "/bin/bash", "-c"]
+
+# PyTorch + torchaudio with CUDA 12.8
+RUN uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# NeMo toolkit (ASR collection includes diarization)
+RUN uv pip install "nemo_toolkit[asr]" soundfile pydub
+
+# Init conda, auto-activate
+RUN conda init bash && \
+    echo "conda activate transcriber" >> ~/.bashrc
+
+WORKDIR /workspace
+CMD ["/bin/bash"]
